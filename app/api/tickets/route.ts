@@ -11,7 +11,7 @@ export async function POST(request:Request){
   const id=crypto.randomUUID();const now=Date.now();const attachments:{key:string;name:string;size:number}[]=[];
   if(files.length&&!env.BUCKET)throw new Error('Attachment storage unavailable');
   for(const value of files){const file=value as File;const key='attachments/'+id+'/'+crypto.randomUUID();await env.BUCKET!.put(key,await file.arrayBuffer(),{httpMetadata:{contentType:file.type}});uploaded.push(key);attachments.push({key,name:file.name.slice(0,250),size:file.size});}
-  const record={...parsed.data,id,number:'CAD-'+(new Date(now).getUTCFullYear()+543)+'-'+id.slice(0,8).toUpperCase(),status:'new',assignee:'',createdAt:now,updatedAt:now,creatorId:user.id,events:JSON.stringify([{text:'แจ้งปัญหาเข้าสู่ระบบ',at:now,author:parsed.data.reporter}]),attachments:JSON.stringify(attachments)};
+  const record={...parsed.data,id,number:'CAD-'+(new Date(now).getUTCFullYear()+543)+'-'+id.slice(0,8).toUpperCase(),status:'new',assignee:'',createdAt:now,updatedAt:now,creatorId:user.id,events:JSON.stringify([{text:parsed.data.requestType==='change'?'ส่งคำขอแก้ไขเข้าสู่ระบบ':'แจ้งปัญหาเข้าสู่ระบบ',at:now,author:parsed.data.reporter}]),attachments:JSON.stringify(attachments)};
   await getDb().insert(tickets).values(record).run();return json({ticket:unpack(record)},201);
  }catch(e){for(const key of uploaded){try{await env.BUCKET?.delete(key);}catch{}}console.error('Ticket creation failed',e);return json({error:'ไม่สามารถบันทึกเรื่องได้ กรุณาลองใหม่ ข้อมูลของคุณยังไม่ถูกบันทึก'},503);}
 }

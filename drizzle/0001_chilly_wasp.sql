@@ -1,0 +1,1 @@
+ALTER TABLE `tickets` ADD `request_type` text DEFAULT 'issue' NOT NULL;
