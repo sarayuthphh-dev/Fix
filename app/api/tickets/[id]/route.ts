@@ -1,12 +1,15 @@
-import {identity,json,sameOrigin,patchSchema,findTicket,getDb,tickets,unpack,statusLabels,eq} from '../shared';
+import {identity,json,patchSchema,findTicket,getDb,tickets,unpack,statusLabels,eq,isStaff,canRead,HttpError,failure} from '../shared';
 import {and} from 'drizzle-orm';
-export async function PATCH(request:Request,ctx:{params:Promise<{id:string}>}){
- const user=identity(request);if(!user)return json({error:'กรุณาเข้าสู่ระบบก่อนบันทึกข้อมูล'},401);if(!sameOrigin(request))return json({error:'ไม่อนุญาตให้ส่งข้อมูลจากเว็บไซต์อื่น'},403);
- try{
-  if(Number(request.headers.get('Content-Length')||0)>16000)return json({error:'ข้อมูลมีขนาดเกินกำหนด'},413);
-  const p=patchSchema.safeParse(await request.json());if(!p.success)return json({error:'รูปแบบข้อมูลไม่ถูกต้อง'},400);const {id}=await ctx.params;const current=await findTicket(id);if(!current)return json({error:'ไม่พบรายการนี้'},404);
-  if(current.updatedAt!==p.data.updatedAt)return json({error:'รายการถูกเปลี่ยนแปลงแล้ว กรุณาปิดหน้าต่างและโหลดข้อมูลใหม่ก่อนแก้ไข'},409);
-  const events=JSON.parse(current.events);const at=Math.max(Date.now(),current.updatedAt+1);if(current.status!==p.data.status)events.push({text:'ปรับสถานะเป็น '+statusLabels[p.data.status],at,author:user.name});if(current.assignee!==p.data.assignee)events.push({text:'กำหนดผู้รับผิดชอบ: '+(p.data.assignee||'ยังไม่ระบุ'),at,author:user.name});if(p.data.comment)events.push({text:p.data.comment,at,author:user.name});
-  const values={status:p.data.status,assignee:p.data.assignee,updatedAt:at,events:JSON.stringify(events)};const result=await getDb().update(tickets).set(values).where(and(eq(tickets.id,id),eq(tickets.updatedAt,current.updatedAt))).returning().get();if(!result)return json({error:'มีการเปลี่ยนแปลงพร้อมกัน กรุณาโหลดข้อมูลใหม่'},409);return json({ticket:unpack(result)});
- }catch(e){console.error('Ticket update failed',e);return json({error:'ไม่สามารถบันทึกการเปลี่ยนแปลงได้ กรุณาลองใหม่'},503);}
-}
+import {readJson} from '../../../../lib/http';
+export async function PATCH(request:Request,ctx:{params:Promise<{id:string}>}){try{
+ const user=await identity(request);if(!user)throw new HttpError(401,'กรุณาเข้าสู่ระบบก่อนบันทึกข้อมูล');const p=patchSchema.safeParse(await readJson(request,16000));if(!p.success)throw new HttpError(400,'รูปแบบข้อมูลไม่ถูกต้อง');
+ const {id}=await ctx.params;const current=await findTicket(id);if(!current||!canRead(user,current))throw new HttpError(404,'ไม่พบรายการนี้');if(current.updatedAt!==p.data.updatedAt)throw new HttpError(409,'รายการถูกเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลใหม่ก่อนแก้ไข');
+ const d=p.data;let status=d.status||current.status;const assignee=d.assignee??current.assignee;let approvalStatus=current.approvalStatus;
+ if(!isStaff(user)&&(status!==current.status||assignee!==current.assignee||d.approvalStatus))throw new HttpError(403,'ผู้ติดต่อเพิ่มข้อมูลได้ แต่เปลี่ยนสถานะหรือผู้รับผิดชอบไม่ได้');
+ if(d.approvalStatus&&user.role!=='admin')throw new HttpError(403,'เฉพาะผู้ดูแลระบบที่อนุมัติคำขอแก้ไขได้');
+ if(d.approvalStatus){if(current.requestType!=='change')throw new HttpError(400,'เรื่องนี้ไม่ใช่คำขอแก้ไข');approvalStatus=d.approvalStatus;if(approvalStatus==='rejected'){if(!d.comment)throw new HttpError(400,'กรุณาระบุเหตุผลที่ไม่อนุมัติ');status='resolved';}}
+ if(current.requestType==='change'&&approvalStatus!=='approved'&&approvalStatus!=='not_required'&&['progress','resolved'].includes(status)&&approvalStatus!=='rejected')throw new HttpError(400,'กรุณาอนุมัติคำขอแก้ไขก่อนเริ่มดำเนินการ');
+ if(approvalStatus==='rejected'&&status==='progress')throw new HttpError(400,'คำขอที่ไม่อนุมัติยังเริ่มดำเนินการไม่ได้');
+ const events=JSON.parse(current.events);const at=Math.max(Date.now(),current.updatedAt+1);if(d.approvalStatus&&d.approvalStatus!==current.approvalStatus)events.push({text:approvalStatus==='approved'?'อนุมัติคำขอแก้ไข':'ไม่อนุมัติคำขอแก้ไข',at,author:user.name});if(current.status!==status)events.push({text:'ปรับสถานะเป็น '+statusLabels[status as keyof typeof statusLabels],at,author:user.name});if(current.assignee!==assignee)events.push({text:'กำหนดผู้รับผิดชอบ: '+(assignee||'ยังไม่ระบุ'),at,author:user.name});if(d.comment)events.push({text:d.comment,at,author:user.name});
+ const values={status,assignee,approvalStatus,updatedAt:at,events:JSON.stringify(events)};const result=await getDb().update(tickets).set(values).where(and(eq(tickets.id,id),eq(tickets.updatedAt,current.updatedAt))).returning().get();if(!result)throw new HttpError(409,'มีการเปลี่ยนแปลงพร้อมกัน กรุณาโหลดข้อมูลใหม่');return json({ticket:unpack(result)});
+}catch(e){return failure(e);}}

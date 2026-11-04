@@ -15,6 +15,13 @@
       "when": 1793760801838,
       "tag": "0001_chilly_wasp",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793762167801,
+      "tag": "0002_dizzy_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

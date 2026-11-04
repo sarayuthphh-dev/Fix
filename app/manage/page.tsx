@@ -1,0 +1,6 @@
+"use client";
+import {useEffect,useState} from 'react';
+import Dashboard from '../dashboard';
+import {api} from '../types';
+import {ShieldCheck,ArrowUpRight} from 'lucide-react';
+export default function Manage(){const [allowed,setAllowed]=useState<boolean|null>(null);useEffect(()=>{api<{user:{role:string}|null}>('/api/session').then(d=>setAllowed(d.user?.role==='admin'||d.user?.role==='agent')).catch(()=>setAllowed(false));},[]);if(allowed===null)return <main className="access-screen"><ShieldCheck size={32}/><p>กำลังตรวจสอบสิทธิ์เจ้าหน้าที่...</p></main>;if(!allowed)return <main className="access-screen"><ShieldCheck size={38}/><h1>พื้นที่สำหรับเจ้าหน้าที่</h1><p>เข้าสู่ระบบด้วยบัญชี ChatGPT ที่ผู้ดูแลลงทะเบียนไว้<br/>ข้อมูลสหกรณ์และไฟล์แนบเข้าถึงได้ตามสิทธิ์เท่านั้น</p><a className="btn btn-primary" href="/signin-with-chatgpt?return_to=/manage" target="_top">เข้าสู่ระบบเจ้าหน้าที่ <ArrowUpRight size={15}/></a><a className="text-link" href="/">กลับหน้ารับแจ้งสำหรับสหกรณ์</a></main>;return <Dashboard/>;}
