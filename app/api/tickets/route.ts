@@ -1,6 +1,8 @@
 import {identity,json,sameOrigin,createSchema,getDb,tickets,unpack,env,isStaff,HttpError,failure} from './shared';
 import {desc,and,eq,inArray} from 'drizzle-orm';
-import {cooperatives} from '../../../db/schema';
+import {cooperatives,lineNotifications} from '../../../db/schema';
+import {newLineNotification,dispatchLineNotification} from '../../../lib/line';
+import {backgroundTask} from '../../../lib/background';
 import {limited} from '../../../lib/limits';
 import {readForm} from '../../../lib/http';
 export async function GET(request:Request){try{
@@ -9,7 +11,7 @@ export async function GET(request:Request){try{
  const list=await getDb().select().from(tickets).where(scope).orderBy(desc(tickets.createdAt)).all();return json({tickets:list.map(unpack),user});
 }catch(e){return failure(e);}}
 export async function POST(request:Request){
- const uploaded:string[]=[];
+ const uploaded:string[]=[];let committed=false;
  try{
   if(!sameOrigin(request))throw new HttpError(403,'ไม่อนุญาตคำขอจากเว็บไซต์อื่น');
   const user=await identity(request);if(!isStaff(user)&&await limited(request,'ticket-create',20))throw new HttpError(429,'ส่งเรื่องบ่อยเกินไป กรุณารอสักครู่');
@@ -23,6 +25,7 @@ export async function POST(request:Request){
   if(files.length&&!env.BUCKET)throw new Error('Attachment storage unavailable');
   for(const value of files){const file=value as File;const key='attachments/'+id+'/'+crypto.randomUUID();await env.BUCKET!.put(key,await file.arrayBuffer(),{httpMetadata:{contentType:file.type}});uploaded.push(key);attachments.push({key,name:file.name.slice(0,250),size:file.size});}
   const {website,...fields}=d;const record={...fields,email:user&&!isStaff(user)?user.email:d.email,reporter:user&&!isStaff(user)?user.name:d.reporter,office:coop.name,id,number:'CAD-'+(new Date(now).getUTCFullYear()+543)+'-'+id.slice(0,8).toUpperCase(),status:'new',assignee:'',approvalStatus:d.requestType==='change'?'pending':'not_required',submitterVerified:user?1:0,createdAt:now,updatedAt:now,creatorId:user?.id||'guest:'+id,events:JSON.stringify([{text:d.requestType==='change'?'ส่งคำขอแก้ไข รอผู้ดูแลอนุมัติ':'แจ้งปัญหาเข้าสู่ระบบ',at:now,author:user&&!isStaff(user)?user.name:d.reporter}]),attachments:JSON.stringify(attachments)};
-  await getDb().insert(tickets).values(record).run();return user?json({ticket:unpack(record)},201):json({receipt:{number:record.number,program:record.program,cooperative:coop.name,status:'new'}},201);
- }catch(e){for(const key of uploaded){try{await env.BUCKET?.delete(key);}catch{}}return failure(e);}
+  await getDb().batch([getDb().insert(tickets).values(record),getDb().insert(lineNotifications).values(newLineNotification(id,now))]);committed=true;
+  await backgroundTask(()=>dispatchLineNotification(id));return user?json({ticket:unpack(record)},201):json({receipt:{number:record.number,program:record.program,cooperative:coop.name,status:'new'}},201);
+ }catch(e){for(const key of committed?[]:uploaded){try{await env.BUCKET?.delete(key);}catch{}}return failure(e);}
 }
