@@ -1,0 +1,12 @@
+# Local development only. Copy to .dev.vars; never commit .dev.vars.
+SUPPORT_ADMIN_EMAILS=seedy@sites.test
+PUBLIC_APP_ORIGIN=http://127.0.0.1:5173
+
+# Optional: enable LINE configuration locally with a NEW local-only 32-byte key.
+# Generate with: node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+# Do not replace the production hosting key when setting up another computer.
+LINE_SETTINGS_KEY=
+
+# Optional: email sign-in requires your configured Supabase project.
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
