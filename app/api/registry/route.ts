@@ -6,7 +6,7 @@ import {resolveActor,isStaff,authConfig} from '../../../lib/auth';
 import {json,readJson,failure,HttpError} from '../../../lib/http';
 const email=z.string().trim().email().max(150).transform(s=>s.toLowerCase());
 const coopFields={code:z.string().trim().min(1).max(50),name:z.string().trim().min(2).max(200),province:z.string().trim().max(100).default('')};
-const importRow=z.object({...coopFields,contactName:z.string().trim().max(100).default(''),email:z.union([email,z.literal('')]).default(''),phone:z.string().trim().max(30).default('')});
+const importRow=z.object({code:coopFields.code,name:coopFields.name});
 const actionSchema=z.discriminatedUnion('action',[
  z.object({action:z.literal('cooperative.save'),id:z.string().uuid().optional(),...coopFields,active:z.boolean().default(true)}),
  z.object({action:z.literal('cooperative.status'),id:z.string().uuid(),active:z.boolean()}),
@@ -31,13 +31,11 @@ export async function POST(request:Request){try{
  }else if(d.action==='staff.save'){
   result=await db.insert(staffMembers).values({email:d.email,name:d.name,role:d.role,active:d.active?1:0}).onConflictDoUpdate({target:staffMembers.email,set:{name:d.name,role:d.role,active:d.active?1:0}}).returning().get();target=d.email;
  }else{
-  const byCode=new Map<string,z.infer<typeof importRow>>();for(const row of d.rows){const prior=byCode.get(row.code);if(prior&&(prior.name!==row.name||prior.province!==row.province))throw new HttpError(400,'รหัสสหกรณ์ซ้ำแต่ชื่อหรือจังหวัดไม่ตรงกัน: '+row.code);if(row.email&&!row.contactName)throw new HttpError(400,'กรุณาระบุชื่อผู้ติดต่อของ '+row.code);byCode.set(row.code,row);}
-  const existing=await db.select().from(cooperatives).where(inArray(cooperatives.code,[...byCode.keys()])).all();const ids=new Map(existing.map(c=>[c.code,c.id]));const values=[...byCode.values()].map(row=>({id:ids.get(row.code)||crypto.randomUUID(),code:row.code,name:row.name,province:row.province,createdAt:now,active:1}));for(const row of values)ids.set(row.code,row.id);
-  const statements=[];for(let i=0;i<values.length;i+=10)statements.push(db.insert(cooperatives).values(values.slice(i,i+10)).onConflictDoUpdate({target:cooperatives.code,set:{name:sql`excluded.name`,province:sql`excluded.province`}}));
-  const uniqueContacts=new Map<string,typeof contacts.$inferInsert>();for(const row of d.rows)if(row.email)uniqueContacts.set(row.code+'|'+row.email,{id:crypto.randomUUID(),cooperativeId:ids.get(row.code)!,name:row.contactName,email:row.email,phone:row.phone,status:'pending',createdAt:now});
-  const members=[...uniqueContacts.values()];for(let i=0;i<members.length;i+=8)statements.push(db.insert(contacts).values(members.slice(i,i+8)).onConflictDoNothing({target:[contacts.cooperativeId,contacts.email]}));
+  const byCode=new Map<string,z.infer<typeof importRow>>();for(const row of d.rows){const prior=byCode.get(row.code);if(prior&&prior.name!==row.name)throw new HttpError(400,'รหัสสหกรณ์ซ้ำแต่ชื่อไม่ตรงกัน: '+row.code);byCode.set(row.code,row);}
+  const existing=await db.select().from(cooperatives).where(inArray(cooperatives.code,[...byCode.keys()])).all();const ids=new Map(existing.map(c=>[c.code,c.id]));const values=[...byCode.values()].map(row=>({id:ids.get(row.code)||crypto.randomUUID(),code:row.code,name:row.name,createdAt:now,active:1}));
+  const statements=[];for(let i=0;i<values.length;i+=10)statements.push(db.insert(cooperatives).values(values.slice(i,i+10)).onConflictDoUpdate({target:cooperatives.code,set:{name:sql`excluded.name`}}));
   // D1 batch applies the validated import atomically. Existing approvals are preserved.
-  await db.batch(statements as [typeof statements[number],...typeof statements]);target='import:'+values.length;result={cooperatives:values.length,contacts:members.length};
+  await db.batch(statements as [typeof statements[number],...typeof statements]);target='import:'+values.length;result={cooperatives:values.length,contacts:0};
  }
  await db.insert(registryEvents).values({id:crypto.randomUUID(),actor:actor.email,action:d.action,target,at:now}).run();return json({ok:true,result});
 }catch(e){if(e instanceof Error&&e.message.includes('UNIQUE constraint'))return json({error:'รหัสหรืออีเมลนี้มีอยู่แล้ว กรุณาตรวจสอบทะเบียน'},409);return failure(e);}}
