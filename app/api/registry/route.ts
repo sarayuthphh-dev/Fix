@@ -4,6 +4,7 @@ import {getDb} from '../../../db';
 import {cooperatives,contacts,staffMembers,registryEvents} from '../../../db/schema';
 import {resolveActor,isStaff,authConfig} from '../../../lib/auth';
 import {json,readJson,failure,HttpError} from '../../../lib/http';
+import {emailRequestHistory} from '../../../lib/email-requests';
 const email=z.string().trim().email().max(150).transform(s=>s.toLowerCase());
 const coopFields={code:z.string().trim().min(1).max(50),name:z.string().trim().min(2).max(200),province:z.string().trim().max(100).default('')};
 const importRow=z.object({code:coopFields.code,name:coopFields.name});
@@ -15,7 +16,7 @@ const actionSchema=z.discriminatedUnion('action',[
  z.object({action:z.literal('staff.save'),email,name:z.string().trim().min(2).max(100),role:z.enum(['admin','agent']),active:z.boolean()}),
  z.object({action:z.literal('import'),rows:z.array(importRow).min(1).max(500)})
 ]);
-export async function GET(request:Request){try{const actor=await resolveActor(request);if(!isStaff(actor))throw new HttpError(actor?403:401,'เฉพาะเจ้าหน้าที่ที่ได้รับสิทธิ์');const db=getDb();const [coops,members,staff]=await Promise.all([db.select().from(cooperatives).orderBy(asc(cooperatives.name)).all(),db.select().from(contacts).orderBy(desc(contacts.createdAt)).all(),actor!.role==='admin'?db.select().from(staffMembers).orderBy(asc(staffMembers.name)).all():Promise.resolve([])]);return json({cooperatives:coops,contacts:members,staff,user:actor,emailLoginReady:!!authConfig()});}catch(e){return failure(e);}}
+export async function GET(request:Request){try{const actor=await resolveActor(request);if(!isStaff(actor))throw new HttpError(actor?403:401,'เฉพาะเจ้าหน้าที่ที่ได้รับสิทธิ์');const db=getDb();const [coops,members,staff]=await Promise.all([db.select().from(cooperatives).orderBy(asc(cooperatives.name)).all(),db.select().from(contacts).orderBy(desc(contacts.createdAt)).all(),actor!.role==='admin'?db.select().from(staffMembers).orderBy(asc(staffMembers.name)).all():Promise.resolve([])]);return json({cooperatives:coops,contacts:members,staff,user:actor,emailLoginReady:!!authConfig(),emailRequests:await emailRequestHistory()});}catch(e){return failure(e);}}
 export async function POST(request:Request){try{
  const actor=await resolveActor(request);if(actor?.role!=='admin')throw new HttpError(actor?403:401,'เฉพาะผู้ดูแลระบบที่จัดการทะเบียนได้');const parsed=actionSchema.safeParse(await readJson(request,1500000));if(!parsed.success)throw new HttpError(400,'ข้อมูลไม่ครบหรือรูปแบบไม่ถูกต้อง กรุณาตรวจสอบชื่อ รหัส และอีเมล');const d=parsed.data;const db=getDb();const now=Date.now();let target='';let result:unknown;
  if(d.action==='cooperative.save'){

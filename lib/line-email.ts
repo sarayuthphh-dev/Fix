@@ -18,12 +18,12 @@ export async function notifyEmailLinkRequest(email:string,members:Member[],reque
   if(cfg?.enabled&&cfg.botId&&cfg.destinationId?.startsWith('U')&&cfg.testAcceptedAt){
    const recipient=await getLineRecipient(cfg.destinationId);
    if(recipient?.active){
-    const origin=env.PUBLIC_APP_ORIGIN;if(!origin)throw new Error('Missing origin');const url=new URL('/manage?view=registry',origin);
+    const origin=env.PUBLIC_APP_ORIGIN;if(!origin)throw new Error('Missing origin');const url=new URL('/manage?view=registry&tab=email-requests',origin);
     const message=['✉️ CAD Support — มีการกดขอรับลิงก์เข้าใช้งาน','ผู้ขอ: '+text(members[0]?.contactName||'ยังไม่พบผู้ติดต่อที่ได้รับอนุมัติ'),
      'อีเมล: '+masked,'สหกรณ์: '+(coops.length?coops.slice(0,5).join(' / ')+(coops.length>5?' และอีก '+(coops.length-5)+' แห่ง':''):'ยังไม่พบสหกรณ์ที่ได้รับอนุมัติ'),
      'เวลา: '+new Date(at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'medium',timeStyle:'short'}),
      'แจ้งเมื่อกดปุ่มรับลิงก์ ยังไม่ยืนยันสิทธิ์ ผลส่งอีเมล หรือการเข้าสู่ระบบ',
-     'ตรวจทะเบียนผู้ติดต่อ (ต้องเข้าสู่ระบบเจ้าหน้าที่):',url.toString()].join('\n');
+     'ดูประวัติคำขอรับลิงก์ (ต้องเข้าสู่ระบบเจ้าหน้าที่):',url.toString()].join('\n');
     status='failed';reason='เชื่อมต่อ LINE ไม่สำเร็จ';
     const res=await lineRequest('/v2/bot/message/push',cfg.accessToken,{method:'POST',headers:{'X-Line-Retry-Key':requestId},body:JSON.stringify({to:cfg.destinationId,messages:[{type:'text',text:message}]})});
     const accepted=res.ok||(res.status===409&&!!res.headers.get('x-line-accepted-request-id'));status=accepted?'accepted':'failed';reason=accepted?'LINE รับคำขอแล้ว':lineError(res.status);
