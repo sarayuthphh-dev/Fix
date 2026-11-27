@@ -6,16 +6,17 @@ import {getDb} from '../../../../db';
 import {lineSettings,lineGroups,lineUsers,lineNotifications,tickets,registryEvents} from '../../../../db/schema';
 import {getLineSettings,getLineCredentials,encryptLineSecret,lineRequest,lineError,dispatchLineNotification,getLineRecipient} from '../../../../lib/line';
 import {json,readJson,HttpError,failure} from '../../../../lib/http';
+import {emailLinkLineHistory} from '../../../../lib/line-email';
 const schema=z.discriminatedUnion('action',[
  z.object({action:z.literal('credentials'),accessToken:z.string().trim().max(4096).default(''),channelSecret:z.string().trim().max(256).default('')}),
  z.object({action:z.literal('verify')}),z.object({action:z.literal('destination'),recipientId:z.string().regex(/^[UC][0-9a-f]{32}$/i).optional(),groupId:z.string().regex(/^C[0-9a-f]{32}$/i).optional()}),
  z.object({action:z.literal('test')}),z.object({action:z.literal('enable'),enabled:z.boolean()}),z.object({action:z.literal('retry'),ticketId:z.string().uuid()})
 ]);
-export async function GET(request:Request){try{const actor=await resolveActor(request);if(actor?.role!=='admin')throw new HttpError(actor?403:401,'เฉพาะผู้ดูแลระบบที่ตั้งค่า LINE ได้');const db=getDb();const [cfg,groups,users,notifications,counts]=await Promise.all([
+export async function GET(request:Request){try{const actor=await resolveActor(request);if(actor?.role!=='admin')throw new HttpError(actor?403:401,'เฉพาะผู้ดูแลระบบที่ตั้งค่า LINE ได้');const db=getDb();const [cfg,groups,users,notifications,counts,emailRequests]=await Promise.all([
  getLineSettings(),db.select().from(lineGroups).orderBy(desc(lineGroups.lastSeenAt)).all(),db.select().from(lineUsers).orderBy(desc(lineUsers.lastSeenAt)).all(),
  db.select({ticketId:lineNotifications.ticketId,number:tickets.number,title:tickets.title,office:tickets.office,status:lineNotifications.status,attempts:lineNotifications.attempts,lastError:lineNotifications.lastError,lastHttpStatus:lineNotifications.lastHttpStatus,createdAt:lineNotifications.createdAt,updatedAt:lineNotifications.updatedAt,firstAttemptAt:lineNotifications.firstAttemptAt,acceptedAt:lineNotifications.acceptedAt,lockUntil:lineNotifications.lockUntil}).from(lineNotifications).innerJoin(tickets,eq(lineNotifications.ticketId,tickets.id)).orderBy(desc(lineNotifications.createdAt)).limit(30).all(),
- db.select({status:lineNotifications.status,count:sql<number>`count(*)`}).from(lineNotifications).groupBy(lineNotifications.status).all()
- ]);return json({settings:{keyReady:!!env.LINE_SETTINGS_KEY,hasToken:!!cfg?.encryptedAccessToken,hasSecret:!!cfg?.encryptedChannelSecret,botId:cfg?.botId||null,botName:cfg?.botName||null,recipientId:cfg?.destinationId||null,groupId:cfg?.destinationId||null,enabled:!!cfg?.enabled,testAcceptedAt:cfg?.testAcceptedAt||null},groups,users,notifications,counts});}catch(e){return failure(e);}}
+ db.select({status:lineNotifications.status,count:sql<number>`count(*)`}).from(lineNotifications).groupBy(lineNotifications.status).all(),emailLinkLineHistory()
+ ]);return json({settings:{keyReady:!!env.LINE_SETTINGS_KEY,hasToken:!!cfg?.encryptedAccessToken,hasSecret:!!cfg?.encryptedChannelSecret,botId:cfg?.botId||null,botName:cfg?.botName||null,recipientId:cfg?.destinationId||null,groupId:cfg?.destinationId||null,enabled:!!cfg?.enabled,testAcceptedAt:cfg?.testAcceptedAt||null},groups,users,notifications,counts,emailRequests});}catch(e){return failure(e);}}
 export async function POST(request:Request){try{
  const actor=await resolveActor(request);if(actor?.role!=='admin')throw new HttpError(actor?403:401,'เฉพาะผู้ดูแลระบบที่ตั้งค่า LINE ได้');const p=schema.safeParse(await readJson(request,12000));if(!p.success)throw new HttpError(400,'ข้อมูล LINE ไม่ถูกต้อง');const d=p.data;const db=getDb();const now=Date.now();let message='บันทึกการตั้งค่าแล้ว';
  if(d.action==='credentials'){
@@ -35,7 +36,7 @@ export async function POST(request:Request){try{
  }else if(d.action==='enable'){
   const cfg=await getLineSettings();if(!cfg)throw new HttpError(400,'ยังไม่ได้ตั้งค่า LINE');if(d.enabled&&(!cfg.botId||!cfg.destinationId||!cfg.testAcceptedAt))throw new HttpError(400,'ต้องตรวจสอบบัญชี เลือกผู้รับ และส่งทดสอบสำเร็จก่อนเปิดแจ้งเตือน');
   if(d.enabled){const recipient=await getLineRecipient(cfg.destinationId!);if(!recipient?.active)throw new HttpError(400,'ผู้รับแจ้งเตือนติดต่อไม่ได้ กรุณาเชื่อมต่อและทดสอบอีกครั้ง');}
-  await db.update(lineSettings).set({enabled:d.enabled?1:0,updatedAt:now,updatedBy:actor.email}).where(eq(lineSettings.id,'default')).run();message=d.enabled?'เปิดแจ้งเตือน LINE เมื่อบันทึกเรื่องใหม่แล้ว':'ปิดแจ้งเตือน LINE แล้ว';
+  await db.update(lineSettings).set({enabled:d.enabled?1:0,updatedAt:now,updatedBy:actor.email}).where(eq(lineSettings.id,'default')).run();message=d.enabled?'เปิดแจ้งเตือน LINE แล้ว':'ปิดแจ้งเตือน LINE แล้ว';
  }else{
   const row=await db.select().from(lineNotifications).where(eq(lineNotifications.ticketId,d.ticketId)).get();if(!row)throw new HttpError(404,'ไม่พบรายการแจ้งเตือน');if(row.status==='accepted')return json({message:'LINE รับคำขอนี้แล้ว จึงไม่ส่งซ้ำ'});if(row.lockUntil>now)throw new HttpError(409,'รายการนี้กำลังส่ง กรุณารอสักครู่');if(row.lastAttemptAt&&now-row.lastAttemptAt<10000)throw new HttpError(429,'กรุณารออย่างน้อย 10 วินาทีก่อนลองส่งอีกครั้ง');await dispatchLineNotification(d.ticketId);message='ตรวจสอบผลการส่งได้จากรายการแจ้งเตือนด้านล่าง';
  }
