@@ -16,13 +16,14 @@ npm run build
 
 `Copy-Item` ใช้เมื่อยังไม่มี `.dev.vars` เท่านั้น หากมีไฟล์แล้วให้เก็บค่าปัจจุบันไว้ ตัวอย่างตั้งผู้ดูแลจำลอง `seedy@sites.test` สำหรับพัฒนาบน localhost โดยไม่ใช้รหัสลับจริง
 
-สร้างฐานข้อมูลท้องถิ่นที่ว่างใหม่ด้วย migration ทั้งสี่ตามลำดับ **ทำเฉพาะครั้งแรกบนฐานข้อมูลใหม่** ไม่ใช้คำสั่งนี้ซ้ำกับฐานข้อมูลที่เคยใช้ migration แล้ว:
+สร้างฐานข้อมูลท้องถิ่นที่ว่างใหม่ด้วย migration ทั้งห้าตามลำดับ **ทำเฉพาะครั้งแรกบนฐานข้อมูลใหม่** ไม่ใช้คำสั่งนี้ซ้ำกับฐานข้อมูลที่เคยใช้ migration แล้ว:
 
 ```powershell
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_unique_ink.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_chilly_wasp.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_dizzy_supreme_intelligence.sql
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0003_cultured_patriot.sql
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0004_milky_speed.sql
 npm run dev
 ```
 

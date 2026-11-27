@@ -19,6 +19,7 @@ export const lineSettings = sqliteTable('line_settings', {
   testRetryKey:text('test_retry_key'),testAttemptAt:integer('test_attempt_at'),testAcceptedAt:integer('test_accepted_at'),updatedAt:integer('updated_at').notNull(),updatedBy:text('updated_by').notNull()
 });
 export const lineGroups = sqliteTable('line_groups', {id:text('id').primaryKey(),name:text('name').notNull(),active:integer('active').notNull().default(1),lastSeenAt:integer('last_seen_at').notNull()});
+export const lineUsers = sqliteTable('line_users', {id:text('id').primaryKey(),name:text('name').notNull(),active:integer('active').notNull().default(1),lastSeenAt:integer('last_seen_at').notNull()});
 export const tickets = sqliteTable("tickets", {
   id: text("id").primaryKey(), number: text("number").notNull().unique(), title: text("title").notNull(),
   program: text("program").notNull(), category: text("category").notNull(), priority: text("priority").notNull(),
