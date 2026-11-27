@@ -16,7 +16,7 @@ export async function POST(request:Request){
   if(!sameOrigin(request))throw new HttpError(403,'ไม่อนุญาตคำขอจากเว็บไซต์อื่น');
   const user=await identity(request);if(!isStaff(user)&&await limited(request,'ticket-create',20))throw new HttpError(429,'ส่งเรื่องบ่อยเกินไป กรุณารอสักครู่');
   const length=Number(request.headers.get('Content-Length')||0);if(length>16*1024*1024)throw new HttpError(413,'ไฟล์แนบมีขนาดรวมเกินกำหนด');
-  const form=await readForm(request);const parsed=createSchema.safeParse(Object.fromEntries(Array.from(form.entries()).filter(([k])=>k!=='files')));if(!parsed.success)throw new HttpError(400,'กรุณาเลือกสหกรณ์และกรอกข้อมูลให้ครบ หัวข้ออย่างน้อย 5 ตัวอักษร รายละเอียดอย่างน้อย 10 ตัวอักษร');
+  const form=await readForm(request);const parsed=createSchema.safeParse(Object.fromEntries(Array.from(form.entries()).filter(([k])=>k!=='files')));if(!parsed.success&&parsed.error.issues.some(i=>i.path[0]==='phone'))throw new HttpError(400,'กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง เป็นตัวเลข 8–15 หลัก');if(!parsed.success)throw new HttpError(400,'กรุณาเลือกสหกรณ์และกรอกข้อมูลให้ครบ หัวข้ออย่างน้อย 5 ตัวอักษร รายละเอียดอย่างน้อย 10 ตัวอักษร');
   const d=parsed.data;const coop=await getDb().select().from(cooperatives).where(and(eq(cooperatives.id,d.cooperativeId),eq(cooperatives.active,1))).get();if(!coop)throw new HttpError(400,'ไม่พบสหกรณ์ที่เลือกหรือสหกรณ์ถูกระงับการใช้งาน');
   if(user&&!isStaff(user)&&!user.cooperativeIds.includes(coop.id))throw new HttpError(403,'คุณไม่ได้รับสิทธิ์ของสหกรณ์นี้');
   if(d.requestType==='change'&&!user)throw new HttpError(403,'คำขอแก้ไขต้องเข้าสู่ระบบด้วยผู้ติดต่อที่ได้รับอนุมัติ');

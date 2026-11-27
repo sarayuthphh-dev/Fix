@@ -9,7 +9,8 @@ import {json,sameOrigin,HttpError,failure} from '../../../lib/http';
 export {env,getDb,tickets,eq,json,sameOrigin,HttpError,failure,isStaff,canRead};
 export const identity=resolveActor;
 export function unpack(t:typeof tickets.$inferSelect){return {...t,events:JSON.parse(t.events),attachments:JSON.parse(t.attachments)};}
-export const createSchema=z.object({title:z.string().trim().min(5).max(200),cooperativeId:z.string().uuid(),requestType:z.enum(requestTypeValues).default('issue'),program:z.enum(programs),category:z.enum(categories),priority:z.enum(['low','medium','high']),reporter:z.string().trim().min(1).max(100),email:z.string().trim().email().max(150),description:z.string().trim().min(10).max(10000),website:z.string().max(0).optional()});
+const phone=z.string().trim().max(30).refine(v=>!v||/^\+?[0-9\s().-]+$/.test(v)&&v.replace(/\D/g,'').length>=8&&v.replace(/\D/g,'').length<=15,'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลข 8–15 หลัก').default('');
+export const createSchema=z.object({title:z.string().trim().min(5).max(200),cooperativeId:z.string().uuid(),requestType:z.enum(requestTypeValues).default('issue'),program:z.enum(programs),category:z.enum(categories),priority:z.enum(['low','medium','high']),reporter:z.string().trim().min(1).max(100),email:z.string().trim().email().max(150),phone,description:z.string().trim().min(10).max(10000),website:z.string().max(0).optional()});
 export const patchSchema=z.object({status:z.enum(['new','progress','waiting','resolved']).optional(),assignee:z.string().trim().max(100).optional(),comment:z.string().trim().max(3000).default(''),updatedAt:z.number().int().positive(),approvalStatus:z.enum(['approved','rejected']).optional()});
 export const statusLabels={new:'รอรับเรื่อง',progress:'กำลังดำเนินการ',waiting:'รอข้อมูลเพิ่มเติม',resolved:'แก้ไขแล้ว'};
 export async function findTicket(id:string){return getDb().select().from(tickets).where(eq(tickets.id,id)).get();}

@@ -1,0 +1,1 @@
+ALTER TABLE `tickets` ADD `phone` text DEFAULT '' NOT NULL;

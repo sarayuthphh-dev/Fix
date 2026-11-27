@@ -28,7 +28,7 @@ export const tickets = sqliteTable("tickets", {
   submitterVerified: integer('submitter_verified').notNull().default(0),
   approvalStatus: text('approval_status').notNull().default('not_required'),
   status: text("status").notNull().default("new"), reporter: text("reporter").notNull(), office: text("office").notNull(),
-  email: text("email").notNull(), description: text("description").notNull(), assignee: text("assignee").notNull().default(""),
+  email: text("email").notNull(), phone: text('phone').notNull().default(''), description: text("description").notNull(), assignee: text("assignee").notNull().default(""),
   createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(), events: text("events").notNull(),
   attachments: text("attachments").notNull().default("[]"), creatorId: text("creator_id").notNull()
 },t=>[index('tickets_cooperative_created').on(t.cooperativeId,t.createdAt)]);
